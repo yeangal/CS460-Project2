@@ -9,6 +9,15 @@ struct node {
     struct node *prev;
 };
 
+/*
+Called from the threadHandler function in response to the creation of the FileRead_thread
+Reads the filename passed, gets the number of lines for possible later usage.
+Parses each line into tokens... need to store each token into an array, ex:
+token[0] = proc, token[1] = priority level, token[2] = num of bursts, token[3..'\n'] = burst times
+token[0] = sleep, token[1] = sleep time
+token[0] = stop
+Don't know if this is the right way to do it but it's my thought
+*/
 char fileRead(char filename) {
     FILE *fp;
     int i = 0;
@@ -146,7 +155,7 @@ int main(int argc, char *argv[]) {
             printf("argv[%d] = %s\n", i, argv[i]);
         }
     }
-    
+
     handleThreads(argv[6]);
     
     return 0;
