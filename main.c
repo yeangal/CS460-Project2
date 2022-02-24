@@ -56,12 +56,12 @@ char fileRead(char filename) {
     while(fgets(line[i], 256, fp) != NULL) {
         line[i][strlen(line[i]) - 1] = '\0';
         // printf("line[%d]: %s\n", i, line[i]);
-        
+
         //Check keyword
         token = strtok(line[i], " ");
         if(strcmp(token, "proc") == 0) {
             //Create new process
-            
+
         }
         else if(strcmp(token, "sleep") == 0) {
 
@@ -85,12 +85,24 @@ char fileRead(char filename) {
 
 }
 
-void cpuScheduler() {
+void cpuScheduler(int schedulingAlgorithm) {
+  //FCFS = 0
+  //SJF = 1
+  //PR = 2
+  //RR = 3
 
+  //while still processes
+    //if ready queue has process
+      //pick process
+      //sleep for burst time
+      //put process in IO queue
 }
 
 void ioSystem() {
-
+  //while still processes
+    //if IO queue has process
+      //sleep for IO burst time
+      //put process in ready queue
 }
 
 void handleThreads(char filename) {
@@ -121,7 +133,7 @@ void handleThreads(char filename) {
     if(pthread_join(IOSystem_thread, NULL) != 0) {
         printf("Failed to join thread: IOSystem_thread\n");
     }
-    
+
 }
 
 void print_usage() {
@@ -157,6 +169,6 @@ int main(int argc, char *argv[]) {
     }
 
     handleThreads(argv[6]);
-    
+
     return 0;
 }
