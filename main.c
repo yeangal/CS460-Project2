@@ -2,13 +2,36 @@
 #include <string.h>
 #include <pthread.h>
 
+//Representing keywords as 01(proc), 02(sleep), 03(stop)
 struct node {
     int data;
-    int key;
     struct node *next;
     struct node *prev;
 };
 
+struct node *init() {
+    struct node *new;
+    new = malloc(sizeof(struct node));
+    new->next = NULL;
+    new->prev = NULL;
+    return new;
+}
+
+void insert(struct node *list, int data) {
+    struct node *currentnode = list;
+    struct node *nextnode;
+    struct node *prevnode;
+    struct node *newnode;
+
+    nextnode = currentnode->next;
+    if(currentnode->next == NULL) {
+        newnode = malloc(sizeof(struct node));
+        newnode->data = data;
+        currentnode->next = newnode;
+        newnode->next = NULL;
+        return 0;
+    }
+}
 /*
 Called from the threadHandler function in response to the creation of the FileRead_thread
 Reads the filename passed, gets the number of lines for possible later usage.
@@ -18,11 +41,11 @@ token[0] = sleep, token[1] = sleep time
 token[0] = stop
 Don't know if this is the right way to do it but it's my thought
 */
-char fileRead(char filename) {
+char fileRead(struct node *list, char filename) {
     FILE *fp;
     int i = 0;
     int counter = 0;
-    char token;
+    char *token;
     char lineBuffer;
     char line[256][256];
 
@@ -57,22 +80,24 @@ char fileRead(char filename) {
         line[i][strlen(line[i]) - 1] = '\0';
         // printf("line[%d]: %s\n", i, line[i]);
 
+        //Read file into doubly linked list
+
         //Check keyword
         token = strtok(line[i], " ");
-        if(strcmp(token, "proc") == 0) {
-            //Create new process
+        // if(strcmp(token, "proc") == 0) {
+        //     //Create new process
 
-        }
-        else if(strcmp(token, "sleep") == 0) {
+        // }
+        // else if(strcmp(token, "sleep") == 0) {
 
-        }
-        else if(strcmp(token, "stop") == 0) {
+        // }
+        // else if(strcmp(token, "stop") == 0) {
 
-        }
-        else {
-            printf("Error: Unknown keyword\n");
-            return 1;
-        }
+        // }
+        // else {
+        //     printf("Error: Unknown keyword\n");
+        //     return 1;
+        // }
 
         int j = 0;
         while(token != NULL) {
@@ -82,7 +107,6 @@ char fileRead(char filename) {
         }
         i++;
     }
-
 }
 
 void cpuScheduler(int schedulingAlgorithm) {
@@ -105,12 +129,12 @@ void ioSystem() {
       //put process in ready queue
 }
 
-void handleThreads(char filename) {
+void handleThreads(struct node *list, char filename) {
     pthread_t FileRead_thread;
     pthread_t CPUScheduler_thread;
     pthread_t IOSystem_thread;
 
-    if((pthread_create(&FileRead_thread, NULL, fileRead(filename), NULL)) != 0) {
+    if((pthread_create(&FileRead_thread, NULL, fileRead(list, filename), NULL)) != 0) {
         printf("Failed to create thread: FileRead_thread\n");
         return 1;
     }
@@ -146,29 +170,21 @@ void print_usage() {
 }
 
 int main(int argc, char *argv[]) {
-    FILE *fp;
-    int i = 0;
-    int counter = 0;
-    char *token;
-    char lineBuffer;
-    char line[256][256];
-
-    struct node *head = NULL;
-    struct node *tail = NULL;
-    struct node *current = NULL;
-
     //Checking arguments
     if(argc > 7 || argc < 7) {
         print_usage();
         return 1;
     }
     else {
-        for(i = 0; i < argc; i++) {
+        for(int i = 0; i < argc; i++) {
             printf("argv[%d] = %s\n", i, argv[i]);
         }
     }
 
-    handleThreads(argv[6]);
+    struct node *list = init();
+
+    //Call function to create threads based on provided command line argument
+    handleThreads(list, argv[6]);
 
     return 0;
 }
