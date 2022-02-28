@@ -3,7 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 
-//Representing keywords as 01(proc), 02(sleep), 03(stop)
+//Representing keywords as -1(proc), -2(sleep), -3(stop)
 struct node {
     int data;
     struct node *next;
@@ -16,7 +16,14 @@ struct node *init() {
     new->next = NULL;
     new->prev = NULL;
     return new;
-}
+};
+
+//globals
+pthread_mutex_t readyQLock;
+pthread_mutex_t IOQLock;
+struct node *readyQ;
+struct node *ioQ;
+
 
 void insert(struct node *list, int data) {
     struct node *currentnode = list;
@@ -34,6 +41,10 @@ void insert(struct node *list, int data) {
     }
     printf("currentnode = %d\n", data);
 }
+
+void pull(struct node *process){
+  //remove node from list
+}
 /*
 Called from the threadHandler function in response to the creation of the FileRead_thread
 Reads the filename passed, gets the number of lines for possible later usage.
@@ -43,7 +54,7 @@ token[0] = sleep, token[1] = sleep time
 token[0] = stop
 Don't know if this is the right way to do it but it's my thought
 */
-void *fileRead(struct node *list, char *filename) {
+void *fileRead(struct node *readyQ, char *filename) {
     FILE *fp;
     int i = 0;
     int data;
@@ -89,29 +100,29 @@ void *fileRead(struct node *list, char *filename) {
         if(strcmp(token, "proc") == 0) {
             //Create new process
             printf("proc found!\n");
-            insert(list, 01);
+            insert(readyQ, -1);
             while(strcmp(token, "\n") != 0) {
                 token = strtok(NULL, " ");
                 data = atoi(token);
-                insert(list, data);
+                insert(readyQ, data);
             }
         }
         else if(strcmp(token, "sleep") == 0) {
             printf("sleep found!\n");
-            insert(list, 02);
+            insert(readyQ, -2);
             while(strcmp(token, "\n") != 0) {
                 token = strtok(NULL, " ");
                 data = atoi(token);
-                insert(list, data);
+                insert(readyQ, data);
             }
         }
         else if(strcmp(token, "stop") == 0) {
             printf("stop found!\n");
-            insert(list, 03);
+            insert(readyQ, -3);
             while(strcmp(token, "\n") != 0) {
                 token = strtok(NULL, " ");
                 data = atoi(token);
-                insert(list, data);
+                insert(readyQ, data);
             }
         }
         else {
@@ -130,31 +141,71 @@ void *fileRead(struct node *list, char *filename) {
 }
 
 void cpuScheduler(int schedulingAlgorithm) {
-  //FCFS = 0
-  //SJF = 1
-  //PR = 2
-  //RR = 3
+  int burstTime;
+  struct node *process;
 
-  //while still processes
-    //if ready queue has process
-      //pick process
-      //sleep for burst time
+  while(readyQ != NULL) {
+    while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+    //pick process
+      //FCFS
+      if(schedulingAlgorithm == 0) {
+        //get first in q
+        //process = readyQ head
+      }
+
+      //SJF
+      else if(schedulingAlgorithm == 1) {
+        //get shortest time left in q
+        while(process->next != NULL) {
+          //if process->next burstTime is shorter than process burstTime
+            //process = process->next
+        }
+      }
+
+      //PR
+      else if(schedulingAlgorithm == 2) {
+        //get highest priority in q
+        while(process->next != NULL) {
+          //if process->next priority is shorter than process priority
+            //process = process->next
+        }
+      }
+
+      //RR
+      else if(schedulingAlgorithm == 3) {
+
+      }
+
+      //pull process from readyQ
+      //pull(process)
+      sleep(burstTime);
       //put process in IO queue
+      while(pthread_mutex_lock(&IOQLock) != 0){}//wait for queue access
+      //ioqInsert(process)
+
+  }
+
 }
 
 void ioSystem() {
   //while still processes
-    //if IO queue has process
-      //sleep for IO burst time
-      //put process in ready queue
+  while(readyQ != NULL) {
+    while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+    //get IO burst time
+    //sleep for IO burst time
+    //put process in ready queue
 }
 
-void handleThreads(struct node *list, char *filename) {
+void handleThreads(struct node *readyQ, char *filename) {
     pthread_t FileRead_thread;
     pthread_t CPUScheduler_thread;
     pthread_t IOSystem_thread;
 
-    if((pthread_create(&FileRead_thread, NULL, fileRead(list, filename), NULL)) != 0) {
+    //init mutexes
+  	pthread_mutex_init(&readyQLock, NULL);
+  	pthread_mutex_init(&IOQLock, NULL);
+
+    if((pthread_create(&FileRead_thread, NULL, fileRead(readyQ, filename), NULL)) != 0) {
         printf("Failed to create thread: FileRead_thread\n");
         exit(1);
     }
@@ -181,6 +232,9 @@ void handleThreads(struct node *list, char *filename) {
         exit(1);
     }
 
+    pthread_mutex_destroy(&readyQLock);
+    pthread_mutex_destroy(&IOQLock);
+
 }
 
 void print_usage() {
@@ -204,10 +258,11 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    struct node *list = init();
+    readyQ = init();
+    ioQ = init();
 
     //Call function to create threads based on provided command line argument
-    handleThreads(list, argv[6]);
+    handleThreads(readyQ, argv[6]);
 
     return 0;
 }
