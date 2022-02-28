@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 
 //Representing keywords as -1(proc), -2(sleep), -3(stop)
 struct node {
@@ -23,23 +24,33 @@ pthread_mutex_t readyQLock;
 pthread_mutex_t IOQLock;
 struct node *readyQ;
 struct node *ioQ;
+struct node *head;
 
+void print(struct node *list) {
+    struct node *currentnode = list;
+    struct node *nextnode = currentnode->next;
+
+    while(currentnode->next != NULL) {
+        printf("%d ", nextnode->data);
+        currentnode = nextnode;
+        nextnode = nextnode->next;
+    }
+}
 
 void insert(struct node *list, int data) {
     struct node *currentnode = list;
-    struct node *nextnode;
-    struct node *prevnode;
-    struct node *newnode;
 
-    prevnode = currentnode->prev;
-    nextnode = currentnode->next;
-    if(currentnode->next == NULL) {
-        newnode = malloc(sizeof(struct node));
-        newnode->data = data;
-        currentnode->next = newnode;
-        newnode->next = NULL;
-    }
-    printf("currentnode = %d\n", data);
+    // if(currentnode == NULL) {
+    //     printf("Error: Unable to allocate memory\n");
+    //     exit(1);
+    // }
+
+    // if(list == NULL) {
+    //     currentnode->next = NULL;
+    //     currentnode->prev = NULL;
+    //     head = currentnode;
+    // }
+    printf("Insert Check\n");
 }
 
 void pull(struct node *process){
@@ -97,14 +108,18 @@ void *fileRead(struct node *readyQ, char *filename) {
         //Read file into doubly linked list
         //Check keyword
         token = strtok(line[i], " ");
+        printf("fileRead Check 1\n");
         if(strcmp(token, "proc") == 0) {
             //Create new process
             printf("proc found!\n");
             insert(readyQ, -1);
-            while(strcmp(token, "\n") != 0) {
+            printf("Proc Check 1\n");
+            while(token != "\n") {
                 token = strtok(NULL, " ");
                 data = atoi(token);
+                printf("Proc Check 2\n");
                 insert(readyQ, data);
+                printf("insert(readyQ, %d)\n", data);
             }
         }
         else if(strcmp(token, "sleep") == 0) {
@@ -129,7 +144,7 @@ void *fileRead(struct node *readyQ, char *filename) {
             printf("Error: Unknown keyword\n");
             exit(1);
         }
-
+        printf("fileRead Check 2\n");
         int j = 0;
         while(token != NULL) {
             printf("token[%d]: %s\n", j, token);
@@ -182,18 +197,18 @@ void cpuScheduler(int schedulingAlgorithm) {
       //put process in IO queue
       while(pthread_mutex_lock(&IOQLock) != 0){}//wait for queue access
       //ioqInsert(process)
-
   }
 
 }
 
 void ioSystem() {
   //while still processes
-  while(readyQ != NULL) {
-    while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+    while(readyQ != NULL) {
+        while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
     //get IO burst time
     //sleep for IO burst time
     //put process in ready queue
+    }
 }
 
 void handleThreads(struct node *readyQ, char *filename) {
