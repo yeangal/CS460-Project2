@@ -16,6 +16,7 @@ struct node *init() {
     new = malloc(sizeof(struct node));
     new->next = NULL;
     new->prev = NULL;
+    new->data = -4;
     return new;
 };
 
@@ -41,15 +42,16 @@ void print(struct node *list) {
 void insert(struct node *list, int data) {
     struct node *currentnode = list;
     struct node *newnode;
-    
+
     //If list is empty, prev node will be NULL
+    if(currentnode->data == -4) {
+      currentnode->data = data;
+      currentnode->prev = NULL;
+      currentnode->next = NULL;
+      return;
+    }
+
     while(1) {
-        if(currentnode != NULL) {
-            currentnode->data = data;
-            currentnode->prev = NULL;
-            currentnode->next = NULL;
-        }
-        
         if(currentnode->next == NULL) {
             printf("Inserting %d\n", data);
             newnode = malloc(sizeof(struct node));
