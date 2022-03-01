@@ -52,6 +52,9 @@ void insert(struct node *list, int data) {
     }
 
     while(1) {
+        if(data == 0) {
+            break;
+        }
         if(currentnode->next == NULL) {
             printf("Inserting %d\n", data);
             newnode = malloc(sizeof(struct node));
@@ -67,8 +70,32 @@ void insert(struct node *list, int data) {
     }
 }
 
+void delete(struct node *process) {
+    struct node *currentnode = process;
+
+    while(currentnode != NULL) {
+        free(currentnode);
+        currentnode = currentnode->next;
+    }
+}
+
 void pull(struct node *process){
-  //remove node from list
+    //remove node from list
+    struct node *firstNode = process;
+    struct node *lastNode = process;
+
+    //Change firstNodes current pointer to the last node of the previous line
+    if(firstNode->prev != NULL) {
+        firstNode = firstNode->prev;
+    }
+
+    while(lastNode->data > 0) {
+        lastNode = lastNode->next;
+        if(lastNode->next->data < 0) {
+            firstNode->next = lastNode->next;
+            lastNode->next = NULL;
+        }
+    }
 }
 
 void *fileRead(struct node *readyQ, char *filename) {
