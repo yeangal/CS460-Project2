@@ -38,7 +38,7 @@ void print(struct node *list) {
 }
 
 void insert(struct node *list, int data) {
-    struct node *currentnode = list;
+    // struct node *currentnode = list;
 
     // if(currentnode == NULL) {
     //     printf("Error: Unable to allocate memory\n");
@@ -50,7 +50,6 @@ void insert(struct node *list, int data) {
     //     currentnode->prev = NULL;
     //     head = currentnode;
     // }
-    printf("Insert Check\n");
 }
 
 void pull(struct node *process){
@@ -71,6 +70,7 @@ void *fileRead(struct node *readyQ, char *filename) {
     int data;
     int counter = 0;
     char *token;
+    char *lastToken;
     char lineBuffer;
     char line[256][256];
 
@@ -81,43 +81,48 @@ void *fileRead(struct node *readyQ, char *filename) {
     }
 
     //Get number of lines from input file
-    while(1) {
-        lineBuffer = fgetc(fp);
+    // while(1) {
+    //     lineBuffer = fgetc(fp);
 
-        if(lineBuffer == '\n') {
-            counter++;
-            printf("counter = %d\n", counter);
-        }
+    //     if(lineBuffer == '\n') {
+    //         counter++;
+    //         // printf("counter = %d\n", counter);
+    //     }
 
-        if(lineBuffer == EOF) {
-            printf("EOF reached\n");
-            fclose(fp);
-            break;
-        }
-    }
+    //     if(lineBuffer == EOF) {
+    //         printf("EOF reached\n");
+    //         fclose(fp);
+    //         break;
+    //     }
+    // }
 
     fp = fopen(filename, "r");
     if(fp == NULL) {
         printf("Error: Cannot open file\n");
         exit(1);
     }
-    while(fgets(line[i], 256, fp) != NULL) {
-        line[i][strlen(line[i]) - 1] = '\0';
-        // printf("line[%d]: %s\n", i, line[i]);
 
-        //Read file into doubly linked list
-        //Check keyword
-        token = strtok(line[i], " ");
-        printf("fileRead Check 1\n");
+    //Loop to store each line of file into 2D array
+    while(fgets(line[i], 256, fp) != NULL) {
+        line[i][strlen(line[i])] = '\0';
+        printf("line[%d]: %s\n", i, line[i]);
+        i++;
+    }
+    fclose(fp);
+
+    //Loop to tokenize each line and call functions accordingly
+    while(counter < i) {
+        token = strtok(line[counter], " ");
+        printf("token[%d]: %s\n", counter, token);
         if(strcmp(token, "proc") == 0) {
-            //Create new process
             printf("proc found!\n");
             insert(readyQ, -1);
-            printf("Proc Check 1\n");
-            while(token != "\n") {
+            while(token != NULL) {
                 token = strtok(NULL, " ");
+                if(token == NULL) {
+                    break;
+                }
                 data = atoi(token);
-                printf("Proc Check 2\n");
                 insert(readyQ, data);
                 printf("insert(readyQ, %d)\n", data);
             }
@@ -125,33 +130,35 @@ void *fileRead(struct node *readyQ, char *filename) {
         else if(strcmp(token, "sleep") == 0) {
             printf("sleep found!\n");
             insert(readyQ, -2);
-            while(strcmp(token, "\n") != 0) {
+            while(token != NULL) {
                 token = strtok(NULL, " ");
+                if(token == NULL) {
+                    break;
+                }
                 data = atoi(token);
                 insert(readyQ, data);
+                printf("insert(readyQ, %d)\n", data);
             }
         }
         else if(strcmp(token, "stop") == 0) {
             printf("stop found!\n");
             insert(readyQ, -3);
-            while(strcmp(token, "\n") != 0) {
+            while(token != NULL) {
                 token = strtok(NULL, " ");
+                if(token == NULL) {
+                    break;
+                }
                 data = atoi(token);
                 insert(readyQ, data);
+                printf("insert(readyQ, %d)\n", data);
             }
         }
         else {
             printf("Error: Unknown keyword\n");
             exit(1);
         }
-        printf("fileRead Check 2\n");
-        int j = 0;
-        while(token != NULL) {
-            printf("token[%d]: %s\n", j, token);
-            token = strtok(NULL, " ");
-            j++;
-        }
-        i++;
+        printf("Incrementing counter: %d\n", counter);
+        counter++;
     }
 }
 
@@ -269,7 +276,7 @@ int main(int argc, char *argv[]) {
     }
     else {
         for(int i = 0; i < argc; i++) {
-            printf("argv[%d] = %s\n", i, argv[i]);
+            // printf("argv[%d] = %s\n", i, argv[i]);
         }
     }
 
