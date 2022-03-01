@@ -31,39 +31,44 @@ void print(struct node *list) {
     struct node *nextnode = currentnode->next;
 
     while(currentnode->next != NULL) {
-        printf("%d ", nextnode->data);
+        printf("currentnode->data: %d\n", currentnode->data);
+        printf("currentnode->next->data: %d\n", nextnode->data);
         currentnode = nextnode;
-        nextnode = nextnode->next;
+        nextnode = currentnode->next;
     }
 }
 
 void insert(struct node *list, int data) {
-    // struct node *currentnode = list;
-
-    // if(currentnode == NULL) {
-    //     printf("Error: Unable to allocate memory\n");
-    //     exit(1);
-    // }
-
-    // if(list == NULL) {
-    //     currentnode->next = NULL;
-    //     currentnode->prev = NULL;
-    //     head = currentnode;
-    // }
+    struct node *currentnode = list;
+    struct node *newnode;
+    
+    //If list is empty, prev node will be NULL
+    while(1) {
+        if(currentnode != NULL) {
+            currentnode->data = data;
+            currentnode->prev = NULL;
+            currentnode->next = NULL;
+        }
+        
+        if(currentnode->next == NULL) {
+            printf("Inserting %d\n", data);
+            newnode = malloc(sizeof(struct node));
+            newnode->data = data;
+            currentnode->next = newnode;
+            newnode->prev = currentnode;
+            newnode->next = NULL;
+            break;
+        }
+        else {
+            currentnode = currentnode->next;
+        }
+    }
 }
 
 void pull(struct node *process){
   //remove node from list
 }
-/*
-Called from the threadHandler function in response to the creation of the FileRead_thread
-Reads the filename passed, gets the number of lines for possible later usage.
-Parses each line into tokens... need to store each token into an array, ex:
-token[0] = proc, token[1] = priority level, token[2] = num of bursts, token[3..'\n'] = burst times
-token[0] = sleep, token[1] = sleep time
-token[0] = stop
-Don't know if this is the right way to do it but it's my thought
-*/
+
 void *fileRead(struct node *readyQ, char *filename) {
     FILE *fp;
     int i = 0;
@@ -154,6 +159,7 @@ void *fileRead(struct node *readyQ, char *filename) {
             }
         }
         else {
+            print(readyQ);
             printf("Error: Unknown keyword\n");
             exit(1);
         }
