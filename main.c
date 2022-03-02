@@ -112,8 +112,8 @@ void pull(struct node *process, int flag){
     }
 
     if(listTail && listHead) {
-      if(flag) {readyQ = NULL}
-      else {ioQ = NULL}
+      if(flag) {readyQ = NULL;}
+      else {ioQ = NULL;}
     }
     else if(listTail && !listHead) {
       firstNode->prev->next = NULL;
@@ -122,8 +122,8 @@ void pull(struct node *process, int flag){
     else if(!listTail && listHead) {
       lastNode->prev->next = NULL;
       lastNode->prev = NULL;
-      if(flag) {readyQ = lastNode}
-      else {ioQ = lastNode}
+      if(flag) {readyQ = lastNode;}
+      else {ioQ = lastNode;}
     }
     else {//process is in middle of list
       lastNode->prev->next = NULL;
@@ -183,22 +183,6 @@ void *fileRead(struct node *readyQ, char *filename) {
         exit(1);
     }
 
-    //Get number of lines from input file
-    // while(1) {
-    //     lineBuffer = fgetc(fp);
-
-    //     if(lineBuffer == '\n') {
-    //         counter++;
-    //         // printf("counter = %d\n", counter);
-    //     }
-
-    //     if(lineBuffer == EOF) {
-    //         printf("EOF reached\n");
-    //         fclose(fp);
-    //         break;
-    //     }
-    // }
-
     fp = fopen(filename, "r");
     if(fp == NULL) {
         printf("Error: Cannot open file\n");
@@ -217,8 +201,10 @@ void *fileRead(struct node *readyQ, char *filename) {
     while(counter < i) {
         token = strtok(line[counter], " ");
         printf("token[%d]: %s\n", counter, token);
+
         if(strcmp(token, "proc") == 0) {
             printf("proc found!\n");
+            while(pthread_mutex_lock(&readyQLock) != 0) {}
             insert(readyQ, -1);
             while(token != NULL) {
                 token = strtok(NULL, " ");
@@ -229,42 +215,36 @@ void *fileRead(struct node *readyQ, char *filename) {
                 insert(readyQ, data);
                 printf("insert(readyQ, %d)\n", data);
             }
+            if(pthread_mutex_unlock(&readyQLock) == 0) {
+                printf("Successfuly unlocked readyQ\n");
+            }
         }
         else if(strcmp(token, "sleep") == 0) {
             printf("sleep found!\n");
-            insert(readyQ, -2);
             while(token != NULL) {
                 token = strtok(NULL, " ");
                 if(token == NULL) {
                     break;
                 }
                 data = atoi(token);
-                insert(readyQ, data);
-                printf("insert(readyQ, %d)\n", data);
+                fflush(stdout);
+                sleep(data);
             }
         }
-        else if(strcmp(token, "stop") == 0) {
+        else if(strcmp(token, "stop\n") == 0) {
             printf("stop found!\n");
-            insert(readyQ, -3);
-            while(token != NULL) {
-                token = strtok(NULL, " ");
-                if(token == NULL) {
-                    break;
-                }
-                data = atoi(token);
-                insert(readyQ, data);
-                printf("insert(readyQ, %d)\n", data);
-            }
+            printf("Exiting thread FileRead_thread\n");
+            pthread_exit(NULL);
         }
         else {
-            print(readyQ);
+            // print(readyQ);
             printf("Error: Unknown keyword\n");
-            printf("Calling Test()\n");
-            test(readyQ);
+            // printf("Calling Test()\n");
+            // test(readyQ);
             exit(1);
         }
-        printf("Incrementing counter: %d\n", counter);
         counter++;
+        // printf("Incrementing counter: %d\n", counter);
     }
 }
 
