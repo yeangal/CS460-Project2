@@ -3,6 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 
 //Representing keywords as -1(proc), -2(sleep), -3(stop)
 struct node {
@@ -172,10 +173,12 @@ void *fileRead(struct node *readyQ, char *filename) {
     int i = 0;
     int data;
     int counter = 0;
+    int timerCounter;
     char *token;
     char *lastToken;
     char lineBuffer;
     char line[256][256];
+    clock_t first_t;
 
     fp = fopen(filename, "r");
     if(fp == NULL) {
@@ -206,7 +209,16 @@ void *fileRead(struct node *readyQ, char *filename) {
             printf("proc found!\n");
             while(pthread_mutex_lock(&readyQLock) != 0) {}
             insert(readyQ, -1);
+            timerCounter = 0;
             while(token != NULL) {
+                if(timerCounter == 1) {
+                    first_t = clock();
+                    insert(readyQ, first_t);
+                    insert(readyQ, first_t);
+                    insert(readyQ, 1);
+                    token = strtok(NULL, " ");
+                }
+                timerCounter++;
                 token = strtok(NULL, " ");
                 if(token == NULL) {
                     break;
