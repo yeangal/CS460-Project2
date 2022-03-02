@@ -97,32 +97,58 @@ void pull(struct node *process, int flag){
     struct node *firstNode = process;
     struct node *lastNode = process->next;
 
-    //Change firstNodes current pointer to the last node of the previous line
+    int listHead = 0, listTail = 0;
 
-    while(lastNode->data > 0) {
-        lastNode = lastNode->next;
-        if(lastNode->data < 0) {
-            //If the first node
-            if(firstNode->prev == NULL) {
-                lastNode->prev = NULL;
-                if(flag) {
-                    readyQ = lastNode;
-                }
-                else {
-                    ioQ = lastNode;
-                }
-            }
-            else {
-                firstNode = firstNode->prev;
-                firstNode->next = lastNode;
-                lastNode->prev = firstNode;
-            }
-        }
-        //If last line in file
-        if(lastNode->next == NULL) {
-            break;
-        }
+    if(firstNode->prev == NULL) {//if process is first in list
+      listHead = 1;
     }
+
+    while(lastNode->data > 0) {//find the first node of the next command
+      if(lastNode->next == NULL) {//if process is last in list
+        listTail = 1;
+        break;
+      }
+      lastNode = lastNode->next;
+    }
+
+    if(listTail && listHead) {
+      if(flag) {readyQ = NULL}
+      else {ioQ = NULL}
+    }
+    else if(listTail && !listHead) {
+      firstNode->prev->next = NULL;
+      firstNode->prev = NULL;
+    }
+    else if(!listTail && listHead) {
+      lastNode->prev->next = NULL;
+      lastNode->prev = NULL;
+      if(flag) {readyQ = lastNode}
+      else {ioQ = lastNode}
+    }
+    else {//process is in middle of list
+      lastNode->prev->next = NULL;
+      lastNode->prev = firstNode->prev;
+      firstNode->prev->next = lastNode;
+      firstNode->prev = NULL;
+    }
+
+}
+
+void put(struct node *process, struct node *list){
+  //if list is empty
+  if(list == NULL) {
+    list = process;
+    process->prev = NULL;
+    return;
+  }
+
+  //else normal insert
+  struct node *temp = list;
+  while(temp->next != NULL) {
+    temp = temp->next;
+  }
+  temp->next = process;
+  process->prev = temp;
 }
 
 void test(struct node *list) {
