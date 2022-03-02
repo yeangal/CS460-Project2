@@ -3,6 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 
 //Representing keywords as -1(proc), -2(sleep), -3(stop)
 struct node {
@@ -10,6 +11,13 @@ struct node {
     struct node *next;
     struct node *prev;
 };
+
+struct stats {
+    clock_t start;
+    clock_t lastReady;
+    int totalWait;
+    struct stats *next;
+}
 
 struct node *init() {
     struct node *new;
@@ -23,9 +31,12 @@ struct node *init() {
 //globals
 pthread_mutex_t readyQLock;
 pthread_mutex_t IOQLock;
+pthread_mutex_t statLock;
 struct node *readyQ;
 struct node *ioQ;
-struct node *head;
+struct stats *timerList;
+int schedulingAlgorithm;
+int quantum = 0;
 
 void print(struct node *list) {
     struct node *currentnode = list;
@@ -33,7 +44,7 @@ void print(struct node *list) {
 
     while(currentnode->next != NULL) {
         printf("currentnode->data: %d\n", currentnode->data);
-        printf("currentnode->next->data: %d\n", nextnode->data);
+        // printf("currentnode->next->data: %d\n", nextnode->data);
         currentnode = nextnode;
         nextnode = currentnode->next;
     }
@@ -73,35 +84,72 @@ void insert(struct node *list, int data) {
 void delete(struct node *process) {
     struct node *currentnode = process;
 
-    while(currentnode != NULL) {
+    //If only element left in list
+    if(currentnode->prev == NULL && currentnode->next == NULL) {
         free(currentnode);
-        currentnode = currentnode->next;
+    } //If last element in list
+    else if(currentnode->next == NULL) {
+        currentnode->prev->next = NULL;
+        free(currentnode);
+    } //If first element in list
+    else if(currentnode->prev == NULL) {
+        currentnode->next->prev = NULL;
+        free(currentnode);
+    }
+    else {
+        currentnode->next->prev = currentnode->prev;
+        currentnode->prev->next = currentnode->next;
+        free(currentnode);
     }
 }
 
-void pull(struct node *process){
+void pull(struct node *process, int flag) {
     //remove node from list
     struct node *firstNode = process;
-    struct node *lastNode = process;
+    struct node *lastNode = process->next;
 
-    //Change firstNodes current pointer to the last node of the previous line
-    if(firstNode->prev != NULL) {
-        firstNode = firstNode->prev;
+    int listHead = 0, listTail = 0;
+
+    if(firstNode->prev == NULL) {//if process is first in list
+      listHead = 1;
     }
 
-    while(lastNode->data > 0) {
-        lastNode = lastNode->next;
-        if(lastNode->next->data < 0) {
-            firstNode->next = lastNode->next;
-            lastNode->next = NULL;
-        }
+    while(lastNode->data > 0) {//find the first node of the next command
+      if(lastNode->next == NULL) {//if process is last in list
+        listTail = 1;
+        break;
+      }
+      lastNode = lastNode->next;
     }
+
+    if(listTail && listHead) {
+      if(flag) {readyQ = NULL;}
+      else {ioQ = NULL;}
+    }
+    else if(listTail && !listHead) {
+      firstNode->prev->next = NULL;
+      firstNode->prev = NULL;
+    }
+    else if(!listTail && listHead) {
+      lastNode->prev->next = NULL;
+      lastNode->prev = NULL;
+      if(flag) {readyQ = lastNode;}
+      else {ioQ = lastNode;}
+    }
+    else {//process is in middle of list
+      lastNode->prev->next = NULL;
+      lastNode->prev = firstNode->prev;
+      firstNode->prev->next = lastNode;
+      firstNode->prev = NULL;
+    }
+
 }
 
-void put(struct node *process, struct node *list){
+void put(struct node *process, struct node *list) {
   //if list is empty
   if(list == NULL) {
     list = process;
+    process->prev = NULL;
     return;
   }
 
@@ -114,37 +162,59 @@ void put(struct node *process, struct node *list){
   process->prev = temp;
 }
 
+void insertStat(clock_t time) {
+  if(timerList == NULL) {
+    timerList == malloc(sizeof(struct stats))
+    timerList->start = time;
+    timerList->lastReady = time;
+    timerList->totalWait = 0;
+    timerList->next = NULL;
+  }else {
+    struct stats *temp = timerList;
+    while(temp->next != NULL){
+      temp = temp->next;
+    }
+    temp->next == malloc(sizeof(struct stats))
+    temp->next->start = time;
+    temp->next->lastReady = time;
+    temp->next->totalWait = 0;
+    temp->next->next = NULL;
+  }
+}
+
+void test(struct node *list) {
+    struct node *currentnode = list;
+
+    while(currentnode != NULL) {
+        if(currentnode->data == -1) {
+            printf("Pulling...\n");
+            pull(currentnode, 1);
+            break;
+        }
+        else {
+            currentnode = currentnode->next;
+        }
+    }
+    print(readyQ);
+}
+
 void *fileRead(struct node *readyQ, char *filename) {
     FILE *fp;
     int i = 0;
     int data;
     int counter = 0;
+    int timerCounter;
     char *token;
     char *lastToken;
     char lineBuffer;
     char line[256][256];
+    clock_t first_t;
 
     fp = fopen(filename, "r");
     if(fp == NULL) {
         printf("Error: Cannot open file\n");
         exit(1);
     }
-
-    //Get number of lines from input file
-    // while(1) {
-    //     lineBuffer = fgetc(fp);
-
-    //     if(lineBuffer == '\n') {
-    //         counter++;
-    //         // printf("counter = %d\n", counter);
-    //     }
-
-    //     if(lineBuffer == EOF) {
-    //         printf("EOF reached\n");
-    //         fclose(fp);
-    //         break;
-    //     }
-    // }
 
     fp = fopen(filename, "r");
     if(fp == NULL) {
@@ -160,14 +230,25 @@ void *fileRead(struct node *readyQ, char *filename) {
     }
     fclose(fp);
 
+    int procCounter = -1;
     //Loop to tokenize each line and call functions accordingly
     while(counter < i) {
         token = strtok(line[counter], " ");
         printf("token[%d]: %s\n", counter, token);
+
         if(strcmp(token, "proc") == 0) {
             printf("proc found!\n");
-            insert(readyQ, -1);
+            while(pthread_mutex_lock(&readyQLock) != 0) {}
+            insert(readyQ, procCounter);
+            procCounter--;
+            timerCounter = 0;
             while(token != NULL) {
+                if(timerCounter == 1) {
+                    first_t = clock();
+                    insertStat(first_t);
+                    token = strtok(NULL, " ");
+                }
+                timerCounter++;
                 token = strtok(NULL, " ");
                 if(token == NULL) {
                     break;
@@ -175,45 +256,41 @@ void *fileRead(struct node *readyQ, char *filename) {
                 data = atoi(token);
                 insert(readyQ, data);
                 printf("insert(readyQ, %d)\n", data);
+            }
+            if(pthread_mutex_unlock(&readyQLock) == 0) {
+                printf("Successfuly unlocked readyQ\n");
             }
         }
         else if(strcmp(token, "sleep") == 0) {
             printf("sleep found!\n");
-            insert(readyQ, -2);
             while(token != NULL) {
                 token = strtok(NULL, " ");
                 if(token == NULL) {
                     break;
                 }
                 data = atoi(token);
-                insert(readyQ, data);
-                printf("insert(readyQ, %d)\n", data);
+                fflush(stdout);
+                sleep(data);
             }
         }
-        else if(strcmp(token, "stop") == 0) {
+        else if(strcmp(token, "stop\n") == 0) {
             printf("stop found!\n");
-            insert(readyQ, -3);
-            while(token != NULL) {
-                token = strtok(NULL, " ");
-                if(token == NULL) {
-                    break;
-                }
-                data = atoi(token);
-                insert(readyQ, data);
-                printf("insert(readyQ, %d)\n", data);
-            }
+            printf("Exiting thread FileRead_thread\n");
+            pthread_exit(NULL);
         }
         else {
-            print(readyQ);
+            // print(readyQ);
             printf("Error: Unknown keyword\n");
+            // printf("Calling Test()\n");
+            // test(readyQ);
             exit(1);
         }
-        printf("Incrementing counter: %d\n", counter);
         counter++;
+        // printf("Incrementing counter: %d\n", counter);
     }
 }
 
-void cpuScheduler(int schedulingAlgorithm) {
+void cpuScheduler() {
   int burstTime;
   struct node *process;
 
@@ -277,6 +354,7 @@ void handleThreads(struct node *readyQ, char *filename) {
     //init mutexes
   	pthread_mutex_init(&readyQLock, NULL);
   	pthread_mutex_init(&IOQLock, NULL);
+  	pthread_mutex_init(&statLock, NULL);
 
     if((pthread_create(&FileRead_thread, NULL, fileRead(readyQ, filename), NULL)) != 0) {
         printf("Failed to create thread: FileRead_thread\n");
@@ -307,6 +385,7 @@ void handleThreads(struct node *readyQ, char *filename) {
 
     pthread_mutex_destroy(&readyQLock);
     pthread_mutex_destroy(&IOQLock);
+    pthread_mutex_destroy(&statLock);
 
 }
 
@@ -333,6 +412,7 @@ int main(int argc, char *argv[]) {
 
     readyQ = init();
     ioQ = init();
+    timerList = NULL;
 
     //Call function to create threads based on provided command line argument
     handleThreads(readyQ, argv[6]);
