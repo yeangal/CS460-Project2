@@ -98,6 +98,22 @@ void pull(struct node *process){
     }
 }
 
+void put(struct node *process, struct node *list){
+  //if list is empty
+  if(list == NULL) {
+    list = process;
+    return;
+  }
+
+  //else normal insert
+  struct node *temp = list;
+  while(temp->next != NULL) {
+    temp = temp->next;
+  }
+  temp->next = process;
+  process->prev = temp;
+}
+
 void *fileRead(struct node *readyQ, char *filename) {
     FILE *fp;
     int i = 0;
