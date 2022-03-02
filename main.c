@@ -12,6 +12,13 @@ struct node {
     struct node *prev;
 };
 
+struct stats {
+    clock_t start;
+    clock_t lastReady;
+    int totalWait;
+    struct stats *next;
+}
+
 struct node *init() {
     struct node *new;
     new = malloc(sizeof(struct node));
@@ -26,7 +33,7 @@ pthread_mutex_t readyQLock;
 pthread_mutex_t IOQLock;
 struct node *readyQ;
 struct node *ioQ;
-struct node *head;
+struct stats *timerList;
 
 void print(struct node *list) {
     struct node *currentnode = list;
@@ -380,6 +387,7 @@ int main(int argc, char *argv[]) {
 
     readyQ = init();
     ioQ = init();
+    timerList = NULL;
 
     //Call function to create threads based on provided command line argument
     handleThreads(readyQ, argv[6]);
