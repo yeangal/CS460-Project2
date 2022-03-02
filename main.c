@@ -31,9 +31,12 @@ struct node *init() {
 //globals
 pthread_mutex_t readyQLock;
 pthread_mutex_t IOQLock;
+pthread_mutex_t statLock;
 struct node *readyQ;
 struct node *ioQ;
 struct stats *timerList;
+int schedulingAlgorithm;
+int quantum = 0;
 
 void print(struct node *list) {
     struct node *currentnode = list;
@@ -100,7 +103,7 @@ void delete(struct node *process) {
     }
 }
 
-void pull(struct node *process, int flag){
+void pull(struct node *process, int flag) {
     //remove node from list
     struct node *firstNode = process;
     struct node *lastNode = process->next;
@@ -142,7 +145,7 @@ void pull(struct node *process, int flag){
 
 }
 
-void put(struct node *process, struct node *list){
+void put(struct node *process, struct node *list) {
   //if list is empty
   if(list == NULL) {
     list = process;
@@ -157,6 +160,26 @@ void put(struct node *process, struct node *list){
   }
   temp->next = process;
   process->prev = temp;
+}
+
+void insertStat(clock_t time) {
+  if(timerList == NULL) {
+    timerList == malloc(sizeof(struct stats))
+    timerList->start = time;
+    timerList->lastReady = time;
+    timerList->totalWait = 0;
+    timerList->next = NULL;
+  }else {
+    struct stats *temp = timerList;
+    while(temp->next != NULL){
+      temp = temp->next;
+    }
+    temp->next == malloc(sizeof(struct stats))
+    temp->next->start = time;
+    temp->next->lastReady = time;
+    temp->next->totalWait = 0;
+    temp->next->next = NULL;
+  }
 }
 
 void test(struct node *list) {
@@ -207,6 +230,7 @@ void *fileRead(struct node *readyQ, char *filename) {
     }
     fclose(fp);
 
+    int procCounter = -1;
     //Loop to tokenize each line and call functions accordingly
     while(counter < i) {
         token = strtok(line[counter], " ");
@@ -215,14 +239,13 @@ void *fileRead(struct node *readyQ, char *filename) {
         if(strcmp(token, "proc") == 0) {
             printf("proc found!\n");
             while(pthread_mutex_lock(&readyQLock) != 0) {}
-            insert(readyQ, -1);
+            insert(readyQ, procCounter);
+            procCounter--;
             timerCounter = 0;
             while(token != NULL) {
                 if(timerCounter == 1) {
                     first_t = clock();
-                    insert(readyQ, first_t);
-                    insert(readyQ, first_t);
-                    insert(readyQ, 1);
+                    insertStat(first_t);
                     token = strtok(NULL, " ");
                 }
                 timerCounter++;
@@ -267,7 +290,7 @@ void *fileRead(struct node *readyQ, char *filename) {
     }
 }
 
-void cpuScheduler(int schedulingAlgorithm) {
+void cpuScheduler() {
   int burstTime;
   struct node *process;
 
@@ -331,6 +354,7 @@ void handleThreads(struct node *readyQ, char *filename) {
     //init mutexes
   	pthread_mutex_init(&readyQLock, NULL);
   	pthread_mutex_init(&IOQLock, NULL);
+  	pthread_mutex_init(&statLock, NULL);
 
     if((pthread_create(&FileRead_thread, NULL, fileRead(readyQ, filename), NULL)) != 0) {
         printf("Failed to create thread: FileRead_thread\n");
@@ -361,6 +385,7 @@ void handleThreads(struct node *readyQ, char *filename) {
 
     pthread_mutex_destroy(&readyQLock);
     pthread_mutex_destroy(&IOQLock);
+    pthread_mutex_destroy(&statLock);
 
 }
 
