@@ -17,7 +17,7 @@ struct stats {
     clock_t lastReady;
     int totalWait;
     struct stats *next;
-}
+};
 
 struct node *init() {
     struct node *new;
@@ -155,16 +155,17 @@ void put(struct node *process, struct node *list) {
 
   //else normal insert
   struct node *temp = list;
-  while(temp->next != NULL) {
-    temp = temp->next;
+  while(temp->prev != NULL) {
+    temp = temp->prev;
   }
-  temp->next = process;
-  process->prev = temp;
+    temp->prev = process;
+    temp->prev->next = temp;
+    temp->prev->prev = NULL;
 }
 
 void insertStat(clock_t time) {
   if(timerList == NULL) {
-    timerList == malloc(sizeof(struct stats))
+    timerList == malloc(sizeof(struct stats));
     timerList->start = time;
     timerList->lastReady = time;
     timerList->totalWait = 0;
@@ -174,7 +175,7 @@ void insertStat(clock_t time) {
     while(temp->next != NULL){
       temp = temp->next;
     }
-    temp->next == malloc(sizeof(struct stats))
+    temp->next == malloc(sizeof(struct stats));
     temp->next->start = time;
     temp->next->lastReady = time;
     temp->next->totalWait = 0;
@@ -209,12 +210,6 @@ void *fileRead(struct node *readyQ, char *filename) {
     char lineBuffer;
     char line[256][256];
     clock_t first_t;
-
-    fp = fopen(filename, "r");
-    if(fp == NULL) {
-        printf("Error: Cannot open file\n");
-        exit(1);
-    }
 
     fp = fopen(filename, "r");
     if(fp == NULL) {
@@ -399,23 +394,44 @@ void print_usage() {
 }
 
 int main(int argc, char *argv[]) {
-    //Checking arguments
-    if(argc > 7 || argc < 7) {
+    int filenameLoc = 4;
+
+    if(argc > 7 || argc < 5) {
         print_usage();
         return 1;
     }
+
+    if(strcmp(argv[2], "RR") == 0) {
+        int time = atoi(argv[4]);
+        if(!time > 0) {
+            printf("Quantum time must be greater than zero\n");
+            return 1;
+        }
+        quantum = time;
+        schedulingAlgorithm = 3;
+        filenameLoc = 6;
+    }
     else {
-        for(int i = 0; i < argc; i++) {
-            // printf("argv[%d] = %s\n", i, argv[i]);
+        if(argc != 5) {
+            print_usage();
+            return 1;
+        }
+        else if(strcmp(argv[2], "PR") == 0) {
+            schedulingAlgorithm = 2;
+        }
+        else if(strcmp(argv[2], "SJF") == 0) {
+            schedulingAlgorithm = 1;
+        }
+        else if(strcmp(argv[2], "FIFO") == 0) {
+            schedulingAlgorithm = 0;
         }
     }
 
     readyQ = init();
     ioQ = init();
     timerList = NULL;
-
-    //Call function to create threads based on provided command line argument
-    handleThreads(readyQ, argv[6]);
+    
+    handleThreads(readyQ, argv[filenameLoc]);
 
     return 0;
 }
