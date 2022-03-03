@@ -145,12 +145,35 @@ void pull(struct node *process, int flag) {
 
 }
 
-void put(struct node *process, struct node *list) {
+void put(struct node *process, struct node *list, int flag) {
   //if list is empty
   if(list == NULL) {
     list = process;
     process->prev = NULL;
     return;
+  }
+
+  struct node *newnode = list;
+  struct node *temp;
+  //Normal Insert
+  if(flag == 0) {
+      while(newnode->next != NULL) {
+          temp = newnode;
+          newnode = newnode->next;
+      }
+      newnode = process;
+      newnode->next = NULL;
+      newnode->prev = temp;
+      list = process;
+  } //Insert at front
+  else if(flag == 1) {
+      while(newnode->prev != NULL) {
+          newnode = newnode->prev;
+      }
+      newnode = process;
+      newnode->prev = NULL;
+      newnode->next = process->next;
+      list = process;
   }
 
   //else normal insert
