@@ -252,8 +252,6 @@ void *fileRead(struct node *readyQ, char *filename) {
     int counter = 0;
     int timerCounter;
     char *token;
-    char *lastToken;
-    char lineBuffer;
     char line[256][256];
     clock_t first_t;
 
