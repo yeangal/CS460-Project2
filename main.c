@@ -15,7 +15,8 @@ struct node {
 struct stats {
     clock_t start;
     clock_t lastReady;
-    int totalWait;
+    clcok_t totalWait;
+    clock_t totalTime;
     struct stats *next;
 };
 
@@ -30,7 +31,7 @@ struct node *init() {
 
 //globals
 pthread_mutex_t readyQLock;
-pthread_mutex_t IOQLock;
+pthread_mutex_t ioQLock;
 pthread_mutex_t statLock;
 struct node *readyQ;
 struct node *ioQ;
@@ -145,45 +146,46 @@ void pull(struct node *process, int flag) {
 
 }
 
-void put(struct node *process, struct node *list, int flag) {
+void put(struct node *process, struct node *list, int listFlag, int possitionFlag) {
+  //possitionFlag
+  //0 = insert at front
+  //1 = insert at end
+
   //if list is empty
   if(list == NULL) {
-    list = process;
+    if(listFlag) {readyQ = process;}
+    else {ioQ = process;}
     process->prev = NULL;
     return;
   }
 
-  struct node *newnode = list;
   struct node *temp;
-  //Normal Insert
-  if(flag == 0) {
-      while(newnode->next != NULL) {
-          temp = newnode;
-          newnode = newnode->next;
-      }
-      newnode = process;
-      newnode->next = NULL;
-      newnode->prev = temp;
-      list = process;
-  } //Insert at front
-  else if(flag == 1) {
-      while(newnode->prev != NULL) {
-          newnode = newnode->prev;
-      }
-      newnode = process;
-      newnode->prev = NULL;
-      newnode->next = process->next;
-      list = process;
+  //Insert at end
+  if(possitionFlag) {
+    temp = list;
+    while(temp->next != NULL) {//find end of list
+      temp = temp->next;
+    }
+    temp->next = process;
+    temp->next->prev = temp;
   }
-
-  //else normal insert
-  struct node *temp = list;
-  while(temp->prev != NULL) {
-    temp = temp->prev;
+  //Insert at front
+  else {
+    temp = process;
+    while(temp->next != NULL) {//find end of process
+      temp = temp->next;
+    }
+    if(listFlag) {
+      temp->next = readyQ;
+      readyQ->prev = temp;
+      readyQ = process;
+    }
+    else {
+      temp->next = ioQ;
+      ioQ->prev = temp;
+      ioQ = process;
+    }
   }
-    temp->prev = process;
-    temp->prev->next = temp;
-    temp->prev->prev = NULL;
 }
 
 void insertStat(clock_t time) {
@@ -192,6 +194,7 @@ void insertStat(clock_t time) {
     timerList->start = time;
     timerList->lastReady = time;
     timerList->totalWait = 0;
+    timerList->totalTime = 0;
     timerList->next = NULL;
   }else {
     struct stats *temp = timerList;
@@ -202,6 +205,7 @@ void insertStat(clock_t time) {
     temp->next->start = time;
     temp->next->lastReady = time;
     temp->next->totalWait = 0;
+    temp->next->totalTime = 0;
     temp->next->next = NULL;
   }
 }
@@ -220,6 +224,25 @@ void test(struct node *list) {
         }
     }
     print(readyQ);
+}
+
+int processesAreDone() {
+  struct stats *temp = timerList;
+  while(temp != NULL) {
+    if(temp->totalTime == 0) {return 0;}
+    temp = temp->next;
+  }
+  return 1;
+}
+
+int totalBurstTime(struct node *burstNode) {
+  int total = 0;
+  total += burstNode->data;
+  while(burstNode->next != NULL) {
+    burstNode = burstNode->next->next;
+    total += burstNode->data;
+  }
+  return total;
 }
 
 void *fileRead(struct node *readyQ, char *filename) {
@@ -309,59 +332,388 @@ void *fileRead(struct node *readyQ, char *filename) {
 }
 
 void cpuScheduler() {
-  int burstTime;
   struct node *process;
+  struct node *temp;
+  int burstTime, currentBurst, highestPriority, processFinished, procCounter;
 
-  while(readyQ != NULL) {
-    while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
-    //pick process
-      //FCFS
-      if(schedulingAlgorithm == 0) {
-        //get first in q
-        //process = readyQ head
+  //FIFO
+  if(schedulingAlgorithm == 0) {
+
+    while(1) {
+      //check if done with thread
+      while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+      if(processesAreDone()) {
+        break;
+      }
+      pthread_mutex_unlock(&statLock);
+
+      while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+      if(readyQ != NULL){
+
+        //locate and handle next process
+        process = readyQ;
+        temp = process->next->next;
+        burstTime = temp->data;
+        if(temp->next == NULL){
+          processFinished = 1;
+        }else {
+          processFinished = 0;
+        }
+        delete(temp);
+        pull(process, 1);
+        pthread_mutex_unlock(&readyQLock);
+
+        //incriment wait time
+        while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+        procCounter = -1;
+        temp = timerList;
+        while(procCounter != process->data) {
+          procCounter--;
+          temp = timerList->next;
+        }
+        temp->totalWait += clock() - temp->lastReady;
+        pthread_mutex_unlock(&statLock);
+
+        //process burst time
+        sleep(burstTime);
+
+      }else {pthread_mutex_unlock(&readyQLock);}
+
+      //adding process to ioQ or removing completed process
+      if(processFinished) {
+        //calculate finish time
+        while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+        procCounter = -1;
+        temp = timerList;
+        while(procCounter != process->data) {
+          procCounter--;
+          temp = timerList->next;
+        }
+        temp->totalTime = clock() - temp->start;
+        pthread_mutex_unlock(&statLock);
+        //delete process
+        delete(process->next);
+        delete(process);
+      }else {
+        while(pthread_mutex_lock(&ioQLock) != 0){}//wait for queue access
+        put(process, ioQ, 0, 1);
+        pthread_mutex_unlock(&ioQLock);
       }
 
-      //SJF
-      else if(schedulingAlgorithm == 1) {
-        //get shortest time left in q
-        while(process->next != NULL) {
-          //if process->next burstTime is shorter than process burstTime
-            //process = process->next
+    }
+    //exit thread
+    pthread_exit(NULL);
+
+  }
+
+  //SJF
+  else if(schedulingAlgorithm == 1) {
+
+    while(1) {
+      //check if done with thread
+      while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+      if(processesAreDone()) {
+        break;
+      }
+      pthread_mutex_unlock(&statLock);
+
+      while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+      if(readyQ != NULL){
+
+        //locate next process
+        temp = readyQ;
+        burstTime = 1000000;
+        while(temp != NULL) {//loop through processes
+          //compare total burst times for shortest
+          currentBurst = totalBurstTime(temp->next->next);
+          if(currentBurst < burstTime){//set process if burst is shorter
+            process = temp;
+            burstTime = currentBurst;
+          }
+          //find next process
+          temp = temp->next;
+          while(temp->data >= 0) {
+            temp = temp->next;
+            if(temp == NULL) {break;}
+          }
+        }
+
+        //handle next process
+        temp = process->next->next;
+        burstTime = temp->data;
+        if(temp->next == NULL){
+          processFinished = 1;
+        }else {
+          processFinished = 0;
+        }
+        delete(temp);
+        pull(process, 1);
+        pthread_mutex_unlock(&readyQLock);
+
+        //incriment wait time
+        while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+        procCounter = -1;
+        temp = timerList;
+        while(procCounter != process->data) {
+          procCounter--;
+          temp = timerList->next;
+        }
+        temp->totalWait += clock() - temp->lastReady;
+        pthread_mutex_unlock(&statLock);
+
+        //process burst time
+        sleep(burstTime);
+
+      }else {pthread_mutex_unlock(&readyQLock);}
+
+      //adding process to ioQ or removing completed process
+      if(processFinished) {
+        //calculate finish time
+        while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+        procCounter = -1;
+        temp = timerList;
+        while(procCounter != process->data) {
+          procCounter--;
+          temp = timerList->next;
+        }
+        temp->totalTime = clock() - temp->start;
+        pthread_mutex_unlock(&statLock);
+        //delete process
+        delete(process->next);
+        delete(process);
+      }else {
+        while(pthread_mutex_lock(&ioQLock) != 0){}//wait for queue access
+        put(process, ioQ, 0, 1);
+        pthread_mutex_unlock(&ioQLock);
+      }
+
+    }
+    //exit thread
+    pthread_exit(NULL);
+
+  }
+
+  //PR
+  else if(schedulingAlgorithm == 2) {
+
+    while(1) {
+      //check if done with thread
+      while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+      if(processesAreDone()) {
+        break;
+      }
+      pthread_mutex_unlock(&statLock);
+
+      while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+      if(readyQ != NULL){
+
+        //locate next process
+        temp = readyQ;
+        highestPriority = 0;
+        while(temp != NULL) {//loop through processes
+          //compare priorities for highest
+          if(highestPriority < temp->next->data){//set process if priority is higher
+            process = temp;
+            highestPriority = temp->next->data;
+          }
+          //find next process
+          temp = temp->next;
+          while(temp->data >= 0) {
+            temp = temp->next;
+            if(temp == NULL) {break;}
+          }
+        }
+
+        //handle next process
+        temp = process->next->next;
+        burstTime = temp->data;
+        if(temp->next == NULL){
+          processFinished = 1;
+        }else {
+          processFinished = 0;
+        }
+        delete(temp);
+        pull(process, 1);
+        pthread_mutex_unlock(&readyQLock);
+
+        //incriment wait time
+        while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+        procCounter = -1;
+        temp = timerList;
+        while(procCounter != process->data) {
+          procCounter--;
+          temp = timerList->next;
+        }
+        temp->totalWait += clock() - temp->lastReady;
+        pthread_mutex_unlock(&statLock);
+
+        //process burst time
+        sleep(burstTime);
+
+      }else {pthread_mutex_unlock(&readyQLock);}
+
+      //adding process to ioQ or removing completed process
+      if(processFinished) {
+        //calculate finish time
+        while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+        procCounter = -1;
+        temp = timerList;
+        while(procCounter != process->data) {
+          procCounter--;
+          temp = timerList->next;
+        }
+        temp->totalTime = clock() - temp->start;
+        pthread_mutex_unlock(&statLock);
+        //delete process
+        delete(process->next);
+        delete(process);
+      }else {
+        while(pthread_mutex_lock(&ioQLock) != 0){}//wait for queue access
+        put(process, ioQ, 0, 1);
+        pthread_mutex_unlock(&ioQLock);
+      }
+
+    }
+    //exit thread
+    pthread_exit(NULL);
+
+  }
+
+  //RR
+  else {
+    int burstCompleted;
+    while(1) {
+      //check if done with thread
+      while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+      if(processesAreDone()) {
+        break;
+      }
+      pthread_mutex_unlock(&statLock);
+
+      while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+      if(readyQ != NULL){
+
+        //locate and handle next process
+        process = readyQ;
+        temp = process->next->next;
+        burstTime = temp->data;
+        if(burstTime < quantum) {
+          burstCompleted = 1;
+        }else {
+          burstCompleted = 0;
+          burstTime = quantum;
+        }
+        if(temp->next == NULL && burstCompleted){
+          processFinished = 1;
+        }else {
+          processFinished = 0;
+        }
+        if(burstCompleted) {delete(temp);}
+        pull(process, 1);
+        pthread_mutex_unlock(&readyQLock);
+
+        //incriment wait time
+        while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+        procCounter = -1;
+        temp = timerList;
+        while(procCounter != process->data) {
+          procCounter--;
+          temp = timerList->next;
+        }
+        temp->totalWait += clock() - temp->lastReady;
+        pthread_mutex_unlock(&statLock);
+
+        //process burst time
+        sleep(burstTime);
+
+      }else {pthread_mutex_unlock(&readyQLock);}
+
+      //adding process to ioQ or removing completed process
+      if(processFinished) {
+        //calculate finish time
+        while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+        procCounter = -1;
+        temp = timerList;
+        while(procCounter != process->data) {
+          procCounter--;
+          temp = timerList->next;
+        }
+        temp->totalTime = clock() - temp->start;
+        pthread_mutex_unlock(&statLock);
+        //delete process
+        delete(process->next);
+        delete(process);
+      }else {
+        if(burstCompleted) {
+          while(pthread_mutex_lock(&ioQLock) != 0){}//wait for queue access
+          put(process, ioQ, 0, 1);
+          pthread_mutex_unlock(&ioQLock);
+        }else {
+          while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+          put(process, readyQ, 1, 1);
+          pthread_mutex_unlock(&readyQLock);
         }
       }
 
-      //PR
-      else if(schedulingAlgorithm == 2) {
-        //get highest priority in q
-        while(process->next != NULL) {
-          //if process->next priority is shorter than process priority
-            //process = process->next
-        }
-      }
+    }
+    //exit thread
+    pthread_exit(NULL);
 
-      //RR
-      else if(schedulingAlgorithm == 3) {
-
-      }
-
-      //pull process from readyQ
-      //pull(process)
-      sleep(burstTime);
-      //put process in IO queue
-      while(pthread_mutex_lock(&IOQLock) != 0){}//wait for queue access
-      //ioqInsert(process)
   }
 
 }
 
 void ioSystem() {
-  //while still processes
-    while(readyQ != NULL) {
-        while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
-    //get IO burst time
-    //sleep for IO burst time
-    //put process in ready queue
+  struct node *process;
+  struct node *temp;
+  int burstTime, procCounter;
+
+  while(1) {
+    //check if done with thread
+    while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+    if(processesAreDone()) {
+      break;
     }
+    pthread_mutex_unlock(&statLock);
+
+    //process IO burst times
+    while(pthread_mutex_lock(&ioQLock) != 0){}//wait for queue access
+    if(ioQ != NULL) {//if ioQ is not empty
+      //get and process burst time
+      process = ioQ;
+      temp = ioQ->next->next;
+      burstTime = temp->data;
+      delete(temp);
+      pull(process, 0);
+      pthread_mutex_unlock(&ioQLock);
+      sleep(burstTime);
+
+      //updating process wait timer
+      while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
+      procCounter = -1;
+      temp = timerList;
+      while(procCounter != process->data) {
+        procCounter--;
+        temp = timerList->next;
+      }
+      temp->lastReady = clock();
+      pthread_mutex_unlock(&statLock);
+
+      //adding process to readyQ
+      while(pthread_mutex_lock(&readyQLock) != 0){}//wait for queue access
+      if(schedulingAlgorithm == 0) {
+        put(process, readyQ, 1, 0);
+      }else {
+        put(process, readyQ, 1, 1);
+      }
+      pthread_mutex_unlock(&readyQLock);
+
+    }else {pthread_mutex_unlock(&ioQLock);}
+
+  }
+  //exit thread
+  pthread_exit(NULL);
+
 }
 
 void handleThreads(struct node *readyQ, char *filename) {
@@ -371,7 +723,7 @@ void handleThreads(struct node *readyQ, char *filename) {
 
     //init mutexes
   	pthread_mutex_init(&readyQLock, NULL);
-  	pthread_mutex_init(&IOQLock, NULL);
+  	pthread_mutex_init(&ioQLock, NULL);
   	pthread_mutex_init(&statLock, NULL);
 
     if((pthread_create(&FileRead_thread, NULL, fileRead(readyQ, filename), NULL)) != 0) {
@@ -401,8 +753,10 @@ void handleThreads(struct node *readyQ, char *filename) {
         exit(1);
     }
 
+    //here process time data and print out stats
+
     pthread_mutex_destroy(&readyQLock);
-    pthread_mutex_destroy(&IOQLock);
+    pthread_mutex_destroy(&ioQLock);
     pthread_mutex_destroy(&statLock);
 
 }
@@ -453,7 +807,7 @@ int main(int argc, char *argv[]) {
     readyQ = init();
     ioQ = init();
     timerList = NULL;
-    
+
     handleThreads(readyQ, argv[filenameLoc]);
 
     return 0;
