@@ -264,7 +264,7 @@ int processesAreDone() {
 int totalBurstTime(struct node *burstNode) {
   int total = 0;
   total += burstNode->data;
-  while(burstNode->next != NULL) {
+  while(burstNode->next != NULL && burstNode->next->data > 0) {
     burstNode = burstNode->next->next;
     total += burstNode->data;
   }
@@ -520,6 +520,7 @@ void *cpuScheduler() {
 
     }
     //exit thread
+    pthread_mutex_unlock(&statLock);
     printf("Exiting Scheduling Thread\n");
     pthread_exit(NULL);
 
@@ -607,6 +608,7 @@ void *cpuScheduler() {
 
     }
     //exit thread
+    pthread_mutex_unlock(&statLock);
     printf("Exiting Scheduling Thread\n");
     pthread_exit(NULL);
 
@@ -630,11 +632,12 @@ void *cpuScheduler() {
         process = readyQ;
         temp = process->next->next;
         burstTime = temp->data;
-        if(burstTime < quantum) {
+        if(burstTime <= quantum) {
           burstCompleted = 1;
         }else {
           burstCompleted = 0;
           burstTime = quantum;
+          temp->data -= quantum;
         }
         pull(process, 1);
         if(temp->next == NULL && burstCompleted){
@@ -700,6 +703,7 @@ void *cpuScheduler() {
 
     }
     //exit thread
+    pthread_mutex_unlock(&statLock);
     printf("Exiting Scheduling Thread\n");
     pthread_exit(NULL);
 
