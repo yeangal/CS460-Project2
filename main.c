@@ -38,6 +38,7 @@ struct node *ioQ;
 struct stats *timerList;
 int schedulingAlgorithm;
 int quantum = 0;
+int fileReadDone = 0;
 
 void print(struct node *list) {
     struct node *currentnode = list;
@@ -49,6 +50,33 @@ void print(struct node *list) {
         currentnode = nextnode;
         nextnode = currentnode->next;
     }
+}
+
+void printOutput(char *filename) {
+
+  clock_t totalWaitTicks = 0,totalProcessTicks = 0;
+  int totalWaitTime, totalTime, processCount = 0;
+  struct stats *stat = timerList;
+
+  while(stat != NULL){
+    totalWaitTicks += stat->totalWait;
+    totalProcessTicks += stat->totalTime;
+    processCount++;
+    stat = stat->next;
+  }
+
+  totalTime = (totalProcessTicks/CLOCKS_PER_SEC)*1000;
+  totalWaitTime = (totalWaitTicks/CLOCKS_PER_SEC)*1000;
+
+  printf("Input File Name                  :%s\n", filename);
+  printf("CPU Scheduling alg.              :");
+  if(schedulingAlgorithm == 0){printf("FIFO\n");}
+  else if(schedulingAlgorithm == 1){printf("SJF\n");}
+  else if(schedulingAlgorithm == 2){printf("PR\n");}
+  else{printf("RR, %d\n", quantum);}
+  printf("Throughput                       :%d proc/ms\n", processCount/totalTime);
+  printf("Avg. Turnaround time             :%d ms\n", totalTime/processCount);
+  printf("Avg. Waiting time in ready queue :%d ms\n", totalWaitTime/processCount);
 }
 
 void insert(struct node *list, int data) {
@@ -68,7 +96,7 @@ void insert(struct node *list, int data) {
             break;
         }
         if(currentnode->next == NULL) {
-            printf("Inserting %d\n", data);
+            // printf("Inserting %d\n", data);
             newnode = malloc(sizeof(struct node));
             newnode->data = data;
             currentnode->next = newnode;
@@ -264,7 +292,7 @@ void *fileRead(struct node *readyQ, char *filename) {
     //Loop to store each line of file into 2D array
     while(fgets(line[i], 256, fp) != NULL) {
         line[i][strlen(line[i])] = '\0';
-        printf("line[%d]: %s\n", i, line[i]);
+        // printf("line[%d]: %s\n", i, line[i]);
         i++;
     }
     fclose(fp);
@@ -273,10 +301,10 @@ void *fileRead(struct node *readyQ, char *filename) {
     //Loop to tokenize each line and call functions accordingly
     while(counter < i) {
         token = strtok(line[counter], " ");
-        printf("token[%d]: %s\n", counter, token);
+        // printf("token[%d]: %s\n", counter, token);
 
         if(strcmp(token, "proc") == 0) {
-            printf("proc found!\n");
+            // printf("proc found!\n");
             while(pthread_mutex_lock(&readyQLock) != 0) {}
             insert(readyQ, procCounter);
             procCounter--;
@@ -294,14 +322,14 @@ void *fileRead(struct node *readyQ, char *filename) {
                 }
                 data = atoi(token);
                 insert(readyQ, data);
-                printf("insert(readyQ, %d)\n", data);
+                // printf("insert(readyQ, %d)\n", data);
             }
             if(pthread_mutex_unlock(&readyQLock) == 0) {
-                printf("Successfuly unlocked readyQ\n");
+                // printf("Successfuly unlocked readyQ\n");
             }
         }
         else if(strcmp(token, "sleep") == 0) {
-            printf("sleep found!\n");
+            // printf("sleep found!\n");
             while(token != NULL) {
                 token = strtok(NULL, " ");
                 if(token == NULL) {
@@ -309,12 +337,15 @@ void *fileRead(struct node *readyQ, char *filename) {
                 }
                 data = atoi(token);
                 fflush(stdout);
-                sleep(data);
+                sleep(data/1000);
             }
         }
         else if(strcmp(token, "stop\n") == 0) {
-            printf("stop found!\n");
+            // printf("stop found!\n");
             printf("Exiting thread FileRead_thread\n");
+            while(pthread_mutex_lock(&statLock) != 0) {}
+            fileReadDone = 1;
+            pthread_mutex_unlock(&statLock);
             pthread_exit(NULL);
         }
         else {
@@ -324,6 +355,7 @@ void *fileRead(struct node *readyQ, char *filename) {
         counter++;
         // printf("Incrementing counter: %d\n", counter);
     }
+    pthread_exit(NULL);
 }
 
 void *cpuScheduler() {
@@ -338,7 +370,7 @@ void *cpuScheduler() {
     while(1) {
       //check if done with thread
       while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
-      if(processesAreDone()) {
+      if(processesAreDone() && fileReadDone) {
         break;
       }
       pthread_mutex_unlock(&statLock);
@@ -371,7 +403,7 @@ void *cpuScheduler() {
         pthread_mutex_unlock(&statLock);
 
         //process burst time
-        sleep(burstTime);
+        sleep(burstTime/1000);
 
       }else {pthread_mutex_unlock(&readyQLock);}
 
@@ -398,6 +430,7 @@ void *cpuScheduler() {
 
     }
     //exit thread
+    printf("Exiting Scheduling Thread\n");
     pthread_exit(NULL);
 
   }
@@ -408,7 +441,7 @@ void *cpuScheduler() {
     while(1) {
       //check if done with thread
       while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
-      if(processesAreDone()) {
+      if(processesAreDone() && fileReadDone) {
         break;
       }
       pthread_mutex_unlock(&statLock);
@@ -458,7 +491,7 @@ void *cpuScheduler() {
         pthread_mutex_unlock(&statLock);
 
         //process burst time
-        sleep(burstTime);
+        sleep(burstTime/1000);
 
       }else {pthread_mutex_unlock(&readyQLock);}
 
@@ -485,6 +518,7 @@ void *cpuScheduler() {
 
     }
     //exit thread
+    printf("Exiting Scheduling Thread\n");
     pthread_exit(NULL);
 
   }
@@ -495,7 +529,7 @@ void *cpuScheduler() {
     while(1) {
       //check if done with thread
       while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
-      if(processesAreDone()) {
+      if(processesAreDone() && fileReadDone) {
         break;
       }
       pthread_mutex_unlock(&statLock);
@@ -544,7 +578,7 @@ void *cpuScheduler() {
         pthread_mutex_unlock(&statLock);
 
         //process burst time
-        sleep(burstTime);
+        sleep(burstTime/1000);
 
       }else {pthread_mutex_unlock(&readyQLock);}
 
@@ -571,6 +605,7 @@ void *cpuScheduler() {
 
     }
     //exit thread
+    printf("Exiting Scheduling Thread\n");
     pthread_exit(NULL);
 
   }
@@ -581,7 +616,7 @@ void *cpuScheduler() {
     while(1) {
       //check if done with thread
       while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
-      if(processesAreDone()) {
+      if(processesAreDone() && fileReadDone) {
         break;
       }
       pthread_mutex_unlock(&statLock);
@@ -620,7 +655,7 @@ void *cpuScheduler() {
         pthread_mutex_unlock(&statLock);
 
         //process burst time
-        sleep(burstTime);
+        sleep(burstTime/1000);
 
       }else {pthread_mutex_unlock(&readyQLock);}
 
@@ -663,6 +698,7 @@ void *cpuScheduler() {
 
     }
     //exit thread
+    printf("Exiting Scheduling Thread\n");
     pthread_exit(NULL);
 
   }
@@ -678,7 +714,7 @@ void *ioSystem() {
   while(1) {
     //check if done with thread
     while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
-    if(processesAreDone()) {
+    if(processesAreDone() && fileReadDone) {
       break;
     }
     pthread_mutex_unlock(&statLock);
@@ -693,7 +729,7 @@ void *ioSystem() {
       delete(temp);
       pull(process, 0);
       pthread_mutex_unlock(&ioQLock);
-      sleep(burstTime);
+      sleep(burstTime/1000);
 
       //updating process wait timer
       while(pthread_mutex_lock(&statLock) != 0){}//wait for list access
@@ -719,6 +755,7 @@ void *ioSystem() {
 
   }
   //exit thread
+  printf("Exiting IO Thread\n");
   pthread_exit(NULL);
 
 }
@@ -759,8 +796,6 @@ void handleThreads(struct node *readyQ, char *filename) {
         printf("Failed to join thread: IOSystem_thread\n");
         exit(1);
     }
-
-    //here process time data and print out stats
 
     pthread_mutex_destroy(&readyQLock);
     pthread_mutex_destroy(&ioQLock);
@@ -816,6 +851,8 @@ int main(int argc, char *argv[]) {
     timerList = NULL;
 
     handleThreads(readyQ, argv[filenameLoc]);
+
+    printOutput(argv[filenameLoc]);
 
     return 0;
 }
