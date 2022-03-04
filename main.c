@@ -318,11 +318,8 @@ void *fileRead(struct node *readyQ, char *filename) {
             pthread_exit(NULL);
         }
         else {
-            // print(readyQ);
             printf("Error: Unknown keyword\n");
-            // printf("Calling Test()\n");
-            // test(readyQ);
-            exit(1);
+            pthread_exit(NULL);
         }
         counter++;
         // printf("Incrementing counter: %d\n", counter);
